@@ -10,7 +10,7 @@ class ConfigTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
 
     def test_config_paths_and_environment(self):
         path = self.root / "config.toml"
@@ -49,6 +49,72 @@ class ConfigTests(unittest.TestCase):
             self.skipTest("OS does not permit test symlinks")
         with self.assertRaisesRegex(ValueError, "Symlink|junction"):
             scoped_path(self.root, "link/new", False)
+
+    def test_reparse_ancestor_is_rejected_before_canonicalization(self):
+        import types
+        directory = self.root / "junction"
+        directory.mkdir()
+        target = directory / "public.txt"
+        target.write_text("safe", encoding="utf-8")
+        original = Path.lstat
+        def lstat(path, *args, **kwargs):
+            details = original(path, *args, **kwargs)
+            if path == directory:
+                return types.SimpleNamespace(st_mode=details.st_mode, st_file_attributes=0x400)
+            return details
+        with patch.object(Path, "lstat", lstat), patch.object(Path, "resolve", side_effect=AssertionError("Reparse must be rejected before resolve")):
+            with self.assertRaisesRegex(ValueError, "symlinks or junctions"):
+                scoped_path(self.root, target)
+
+    @unittest.skipUnless(os.name == "nt", "Windows 8.3 paths only")
+    def test_windows_short_aliases_share_scope_and_workspace_lock(self):
+        import ctypes
+        from ctypes import wintypes
+        from ads_mcp.jobs import workspace_lock
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        get_short = kernel.GetShortPathNameW
+        get_short.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+        get_short.restype = wintypes.DWORD
+        def short(path):
+            size = get_short(str(path), None, 0)
+            if not size:
+                self.skipTest("GetShortPathNameW is unavailable for this temporary directory")
+            buffer = ctypes.create_unicode_buffer(size)
+            written = get_short(str(path), buffer, size)
+            if not written or written >= size:
+                self.fail("GetShortPathNameW could not return the allocated short path")
+            return Path(buffer.value)
+        project = self.root / "project directory with long name"
+        project.mkdir()
+        workspace = project / "workspace directory with long name"
+        workspace.mkdir()
+        artifact = workspace / "public artifact.txt"
+        artifact.write_text("source", encoding="utf-8")
+        alias_root, alias_workspace, alias_artifact = short(project), short(workspace), short(artifact)
+        if os.path.normcase(str(alias_root)) == os.path.normcase(str(project)):
+            self.skipTest("The temporary volume does not generate Windows 8.3 aliases")
+        self.assertEqual(scoped_path(project, alias_artifact), artifact.resolve())
+        self.assertEqual(scoped_path(alias_root, artifact), artifact.resolve())
+        self.assertEqual(scoped_path(alias_root, "new/artifact.txt", False), project / "new/artifact.txt")
+        state = self.root / "shared state"
+        long_settings = Settings(None, project, state)
+        alias_settings = Settings(None, alias_root, state)
+        with workspace_lock(long_settings, workspace):
+            with self.assertRaisesRegex(RuntimeError, "already in use"):
+                with workspace_lock(alias_settings, alias_workspace):
+                    self.fail("Aliases must not acquire two independent locks for one workspace")
+        outside = self.root / "outside long directory"
+        outside.mkdir()
+        outside_file = outside / "outside artifact.txt"
+        outside_file.write_text("outside", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "inside project_root"):
+            scoped_path(alias_root, short(outside_file))
+        with self.assertRaisesRegex(ValueError, "Parent path traversal"):
+            scoped_path(alias_root, "../outside artifact.txt", False)
+        private = project / "credentials"
+        private.mkdir()
+        with self.assertRaisesRegex(ValueError, "Credential/private"):
+            scoped_path(alias_root, short(private))
 
     def test_doctor_does_not_check_out_license(self):
         home = self.root / "ADS"

@@ -25,29 +25,37 @@ def _plain_directory_chain(path: Path) -> None:
         raise ValueError("Paths must not traverse symlinks or junctions")
 
 def scoped_path(root: Path | str, value: Path | str, must_exist: bool = True) -> Path:
-    """Reject escaping, link traversal and private paths. Not an OS sandbox."""
-    root = Path(root).absolute()
-    _plain_directory_chain(root)
-    root = root.resolve(strict=True)
+    """Reject escaping, link traversal and private paths. Not an OS sandbox.
+
+    Inspect original spellings before resolving: canonicalization must not hide
+    symlinks/junctions. Compare canonical spellings afterwards so Windows 8.3
+    names and their long-name equivalents identify the same admitted path.
+    """
+    raw_root = Path(root)
     raw = Path(value)
-    candidate = raw if raw.is_absolute() else root / raw
-    if ".." in candidate.parts:
+    if ".." in raw_root.parts or ".." in raw.parts:
         raise ValueError("Parent path traversal is not allowed")
-    try:
-        relative = candidate.absolute().relative_to(root)
-    except ValueError as exc:
-        raise ValueError("Path must be inside project_root") from exc
-    current = root
-    for part in relative.parts:
-        lower = part.lower()
-        if lower in _SENSITIVE or lower.startswith(".env") or lower.endswith((".pem", ".key", ".p12", ".pfx")):
-            raise ValueError("Credential/private configuration paths are not project artifacts")
-        current = current / part
-        if _reparse(current):
-            raise ValueError("Symlink/junction traversal is not allowed")
+    raw_root = raw_root.absolute()
+    candidate = (raw if raw.is_absolute() else raw_root / raw).absolute()
+
+    def reject_private(parts):
+        for part in parts:
+            lower = part.lower()
+            if lower in _SENSITIVE or lower.startswith(".env") or lower.endswith((".pem", ".key", ".p12", ".pfx")):
+                raise ValueError("Credential/private configuration paths are not project artifacts")
+
+    # All existing ancestors are checked before resolve() can erase reparse
+    # evidence. This also applies when an absolute candidate uses an 8.3 alias.
+    for original in (raw_root, candidate):
+        reject_private(original.parts)
+        _plain_directory_chain(original)
+    canonical_root = raw_root.resolve(strict=True)
     resolved = candidate.resolve(strict=must_exist)
-    if not resolved.is_relative_to(root):
+    if not resolved.is_relative_to(canonical_root):
         raise ValueError("Resolved path must be inside project_root")
+    # A short alias may hide a private long filename such as CREDEN~1.JSON.
+    reject_private(canonical_root.parts)
+    reject_private(resolved.relative_to(canonical_root).parts)
     return resolved
 
 @dataclass(frozen=True)

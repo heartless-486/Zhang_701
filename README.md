@@ -72,7 +72,7 @@ AI 客户端 -- MCP stdio --> 本服务
 .\.venv\Scripts\python.exe scripts/check_mcp.py --config ads-mcp.toml
 ```
 
-已通过50项离线测试与真实MCP往返，并完成一次三频点理想电阻原生SP验收，完整S矩阵最大绝对误差5.56e-17以内。EM、HB与主动PDK噪声资格另行验证。
+已通过52项离线测试与真实MCP往返，并完成一次三频点理想电阻原生SP验收，完整S矩阵最大绝对误差5.56e-17以内。EM、HB与主动PDK噪声资格另行验证。
 
 详见 [部署说明](docs/DEPLOY_AI.md)、[能力与提取映射](docs/EXTRACTION_MAP.md)、[公开项目对标](docs/UPSTREAM_REVIEW.md)、[验证记录](docs/VALIDATION.md)。
 
