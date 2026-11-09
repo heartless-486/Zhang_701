@@ -68,6 +68,37 @@ class NativeContractTests(unittest.TestCase):
                 result = execute("inspect_design", {"workspace": str(self.workspace), "cellview": "owned:dut:schematic"}, str(self.root), str(Path(state).resolve() / "operation"), str(Path(state).resolve()))
             self.assertTrue(result["ok"])
 
+    def reparse_attribute(self, flagged):
+        """Model a Windows reparse bit without creating an actual junction."""
+        original = Path.lstat
+        def lstat(path, *args, **kwargs):
+            details = original(path, *args, **kwargs)
+            if path == flagged:
+                return types.SimpleNamespace(st_mode=details.st_mode, st_file_attributes=0x400)
+            return details
+        return patch.object(Path, "lstat", lstat)
+
+    def test_edit_rejects_windows_reparse_attribute_before_copy(self):
+        junction = self.library / "nested_junction"
+        junction.mkdir()
+        with self.reparse_attribute(junction), patch("shutil.copytree") as copy:
+            with self.assertRaisesRegex(ValueError, "symbolic links or junctions"):
+                self.call("edit_design", edits=[{"action": "set_parameters", "name": "R1", "parameters": {"R": "50 Ohm"}}])
+            copy.assert_not_called()
+
+    def test_dataset_rejects_windows_reparse_attribute_before_open(self):
+        directory = self.root / "datasets"
+        directory.mkdir()
+        path = directory / "saved.ds"
+        path.write_bytes(b"source dataset double")
+        dataset = types.ModuleType("keysight.ads.dataset")
+        dataset.open = unittest.mock.Mock(side_effect=AssertionError("must not open a reparse source"))
+        self.modules["keysight.ads"].dataset = dataset
+        with patch.dict(sys.modules, self.modules), self.reparse_attribute(directory):
+            with self.assertRaisesRegex(ValueError, "symbolic links or junctions"):
+                execute("read_dataset", {"path": str(path)}, str(self.root), str(self.output))
+        dataset.open.assert_not_called()
+
     def test_locked_workspace_is_preserved(self):
         lock = self.library / "design.oa.lck"
         lock.write_text("owner", encoding="utf-8")

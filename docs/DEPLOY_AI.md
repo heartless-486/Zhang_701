@@ -11,7 +11,7 @@
 1. 克隆仓库；读取 AGENTS.md。若目录已有文件，不覆盖。
 2. 运行 scripts/bootstrap.ps1，传入 AdsHome 和 ProjectRoot。未传 AdsHome 时仅从 ADS_HOME/HPEESOF_DIR 获取；不要猜多个安装版本中的一个。
 3. 脚本创建独立 .venv，安装本仓库，生成本地 ads-mcp.toml。已存在的配置保留，使用前人工或AI读取确认路径。
-4. doctor 只是环境检查，不取许可证。检查 official_command_exists 和路径，然后运行 capabilities，确认当前安装真实提供 start_local_session/execute_python/get_docs。
+4. doctor 只是环境检查，不取许可证。检查 ok / official_mcp 和路径，然后运行 capabilities，确认当前安装真实提供 start_local_session/execute_python/get_docs。
 5. scripts/check_mcp.py 使用标准 MCP SDK 启动本服务，完成 initialize/tools/list/ads_doctor 往返。这里不会启动原生 ADS 会话。
 6. 从 .ads-mcp/client-config.json 获取标准 stdio 配置。把生成的服务项合并到所用 AI 客户端支持的 MCP 配置中，保留其他服务。客户端 schema 名称以该客户端为准。
 7. 按需要单独运行全新工作区原生验收。成功保存/重新打开对象与仿真/EM资格分别记录。

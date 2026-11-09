@@ -10,7 +10,7 @@ import tempfile
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-async def check(config):
+async def _check(config):
     params = StdioServerParameters(command=sys.executable,
         args=["-m", "ads_mcp", "--config", str(config.resolve()), "serve"], env=dict(os.environ))
     async with stdio_client(params) as (read, write):
@@ -24,6 +24,11 @@ async def check(config):
             # Untrusted clients cannot opt in to arbitrary Python at tool-call time.
             print(json.dumps({"initialize": True, "tools": len(tools), "doctor_roundtrip": True,
                               "native_ADS_started": False, "server": init.serverInfo.name}, ensure_ascii=False))
+
+async def check(config, timeout_seconds=45):
+    """Bound the entire launch/handshake/tool roundtrip, including cleanup."""
+    async with asyncio.timeout(timeout_seconds):
+        return await _check(config)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

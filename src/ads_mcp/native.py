@@ -88,10 +88,25 @@ def execute(operation: str, args: dict, project_root: str, output_dir: str, stat
             if entry.name.lower().endswith((".lck", ".lock", ".cdslck")):
                 raise ValueError("ADS lock present; preserve its owner: " + str(entry))
 
+    def is_reparse(path):
+        # Python 3.11 has no Path.is_junction(). Inspect the Windows reparse
+        # attribute as well as symlinks so all supported host versions agree.
+        try:
+            details = path.lstat()
+        except FileNotFoundError:
+            return False
+        return path.is_symlink() or bool(getattr(details, "st_file_attributes", 0) & 0x400)
+
     def no_links(directory):
-        for entry in [directory, *directory.rglob("*")]:
-            if entry.is_symlink() or (hasattr(entry, "is_junction") and entry.is_junction()):
+        pending = [directory]
+        while pending:
+            entry = pending.pop()
+            if is_reparse(entry):
                 raise ValueError("Input trees may not contain symbolic links or junctions")
+            # Inspect an entry before descending, rather than walking a junction
+            # tree before discovering that it is outside the admitted source.
+            if entry.is_dir():
+                pending.extend(entry.iterdir())
 
     def log_review(text):
         diagnostics = []
@@ -247,7 +262,7 @@ def execute(operation: str, args: dict, project_root: str, output_dir: str, stat
         original_path = original_path if original_path.is_absolute() else root / original_path
         current = original_path
         while current != current.parent:
-            if current.is_symlink() or (hasattr(current, "is_junction") and current.is_junction()):
+            if is_reparse(current):
                 raise ValueError("Dataset paths may not traverse symbolic links or junctions")
             current = current.parent
         path = original_path.resolve(strict=True)
