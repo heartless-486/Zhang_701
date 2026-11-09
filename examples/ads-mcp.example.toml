@@ -1,0 +1,8 @@
+[ads_mcp]
+# Replace these with local paths. Relative paths resolve against this config file.
+ads_home = 'D:\Program Files\Keysight\ADS2027'
+project_root = 'projects'
+state_dir = 'projects/.ads-mcp'
+max_workers = 1
+tool_timeout_seconds = 3600
+allow_execute_python = false

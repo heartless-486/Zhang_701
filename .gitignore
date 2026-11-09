@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+ads-mcp.toml
+.ads-mcp/
+projects/
+*.ds
+*.gds
+.env*
+*_api.txt
+api.txt

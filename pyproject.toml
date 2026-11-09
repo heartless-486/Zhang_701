@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zhang-ads-mcp"
+version = "0.1.0"
+description = "Portable ADS automation using the installed Keysight official MCP"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = ["mcp>=1.29.1,<2", "jsonschema>=4.25,<5", "psutil>=7,<8"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+
+[project.scripts]
+ads-mcp = "ads_mcp.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
